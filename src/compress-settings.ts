@@ -4,7 +4,7 @@ import { findRoute, resolveModelEntryOnRoute, type CompressSettings, type NamedP
 import { configDir } from "./paths.js";
 import { log as loggerLog } from "./logger.js";
 import { expandExternalSummaryChainTolerant, type ExternalSummarySettings } from "./external-summary-settings.js";
-import { resolveCompressAtFoldPoint, resolveCompressAtFoldPointClearThinking } from "./knobs.js";
+import { resolveAnthropicSummaryAsSystem, resolveCompressAtFoldPoint, resolveCompressAtFoldPointClearThinking } from "./knobs.js";
 import { shippedPacksSource } from "./chat-pack.js";
 
 export type { CompressSettings } from "./config.js";
@@ -116,6 +116,7 @@ export function mergeCompress(
         // applyCompressSettings; here only the file tiers cascade).
         compressAtFoldPoint: pick("compressAtFoldPoint"),
         compressAtFoldPointClearThinking: pick("compressAtFoldPointClearThinking"),
+        anthropicSummaryAsSystem: pick("anthropicSummaryAsSystem"),
         promptPack: pick("promptPack"),
         // Whole-chain replace (same semantics as `tiers`/`rules`): an
         // `externalSummary` object at a deeper level replaces the entire
@@ -297,7 +298,7 @@ export function hasCompressSettings(s: CompressSettings): boolean {
 // built and typed here regardless of the installed kernel's Config so both
 // release windows compile identically. Older kernels ignore the extra key
 // (validateConfig does not flag unknown keys).
-export type ResolvedKernelConfig = Config & { preserveRecentTools?: string[]; externalSummary?: ExternalSummarySettings };
+export type ResolvedKernelConfig = Config & { preserveRecentTools?: string[]; externalSummary?: ExternalSummarySettings; anthropicSummaryAsSystem?: boolean };
 
 // Single source of truth for raw->resolved absorb: applyCompressSettings and the
 // plugin-lane base stamp (#1359) both go through this or they drift apart.
@@ -408,6 +409,8 @@ export function applyCompressSettings(base: Config, limit: number, s: CompressSe
             process.env,
             s.compressAtFoldPointClearThinking,
         ),
+        // Host-only egress voicing (Anthropic wire); same explicit pass-through.
+        anthropicSummaryAsSystem: resolveAnthropicSummaryAsSystem(process.env, s.anthropicSummaryAsSystem),
         ...(s.rules !== undefined ? { rules: { enabled: s.rules === true } } : {}),
     };
     return resolved;
@@ -448,6 +451,8 @@ export function resolveRequestConfig(
     // short-circuit byte-for-byte (zero behavior change when nothing is set).
     const cafAt = resolveCompressAtFoldPoint(process.env, compress.compressAtFoldPoint);
     const cafCt = resolveCompressAtFoldPointClearThinking(process.env, compress.compressAtFoldPointClearThinking);
-    if (!hasCompressSettings(compress) && limit === base.modelContextLimit && !cafAt && !cafCt) return base;
+    // Same reachability rule for the env-only Anthropic summary voice.
+    const asSys = resolveAnthropicSummaryAsSystem(process.env, compress.anthropicSummaryAsSystem);
+    if (!hasCompressSettings(compress) && limit === base.modelContextLimit && !cafAt && !cafCt && !asSys) return base;
     return applyCompressSettings(base, limit, compress, namedProviders ?? {});
 }

@@ -1,11 +1,13 @@
 import http from "node:http";
 import type { CompressionCore, Config, CoreMessage, NudgeDecision, PackSurface, Prompts } from "acp-kernel";
-import { renderNudgeText, viableRanges } from "acp-kernel";
+import { isRenderedSummaryMessage, renderNudgeText, viableRanges } from "acp-kernel";
 import { anthropicToCore, buildSystem, coreToAnthropic, extractSystem, healAnthropicSystemPositions, insertBeforeTrailingSystemRun, type AnthropicRequestBody, type AnthropicWireMessage, type BiliMessage } from "acp-kernel/wire";
 import { rewriteInboundThreadContinue } from "./thread-tracking.js";
 import { captureThreadsTurn, estimateThreadsTokens, isThreadsBody, threadsReforgeEnabled } from "./threads-lane.js";
 import type { CompressReasoningConfig } from "../reasoning-drop.js";
 import type { ProxyOptions } from "../config.js";
+import type { ResolvedKernelConfig } from "../compress-settings.js";
+import { summariesToAnthropicSystem } from "../util.js";
 import { pluginAgentHeader } from "../plugin.js";
 import { applyReasoningDrop, dedupeAdjacentOutputConfig, diagNudge, diagTagSummary, deriveTitle, effectiveTokenCount, imageBillingFor, imageReserveFor, imageTokenCapFor, isAutoInjectedNotification, makeFoldPointReasoningDroppable, planReasoningDrop, reapOrphansLogged, runNudgeDecision, stripKernelSummaries, warnAnthropicThinkingPairs, type Prepared } from "../server.js";
 import { recordNudgeObservation } from "../context-analysis.js";
@@ -487,7 +489,14 @@ export async function prepareAnthropic(
         // #3400: egress image rescale — outbound copies only; the originals
         // stay in session state/persistence untouched.
         const egressMessages = await applyImageRescalePass(processedMessages as BiliMessage[], { session, sessionId, log, maxDim: imageRescaleMaxDim(), toolArmed: imageRescaleToolArmed(session) });
-        rebuiltMessages = coreToAnthropic(egressMessages, anthropicCacheMarks ?? cacheControls);
+        // Opt-in Anthropic summary voice: a summary between a user-voiced
+        // message and an assistant message leaves as its own system message
+        // (see summariesToAnthropicSystem). The round-2 adapter applies the
+        // same transform, so both paths emit identical bytes.
+        const voicedMessages = (config as ResolvedKernelConfig).anthropicSummaryAsSystem === true
+            ? summariesToAnthropicSystem(egressMessages, (m) => isRenderedSummaryMessage(m))
+            : egressMessages;
+        rebuiltMessages = coreToAnthropic(voicedMessages, anthropicCacheMarks ?? cacheControls);
         if (sysNotes.length > 0) {
             rebuiltMessages = [...rebuiltMessages, ...sysNotes.map((text) => ({ role: "user" as const, content: text }))];
         }

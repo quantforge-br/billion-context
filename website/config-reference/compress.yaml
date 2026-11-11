@@ -227,6 +227,17 @@ entries:
     desc_zh: "依附于 compress.compressAtFoldPoint 的第二层开关：调用对被挪位的一瞬间，同时丢掉紧邻其前的未签名思考段（模型对本次折叠本身的思考），让挪位后的开头更干净。主开关关闭时无效；带签名的思考块与严格推理回显会话绝不受影响（#1658/#684）。"
     site_en: "EXPERIMENTAL boolean (default false): together with compress.compressAtFoldPoint, clear the unsigned thinking run immediately before a relocated compress pair at the moment of repositioning. Never touches signed thinking or strict reasoning-echo sessions (#1658/#684); inert while the main switch is off."
     site_zh: "实验性布尔开关（默认 false）：配合 compress.compressAtFoldPoint，在调用对被挪位的同时清掉其紧邻之前的未签名思考段。绝不触碰带签名的思考块与严格推理回显会话（#1658/#684）；主开关关闭时无效。"
+  - key: compress.anthropicSummaryAsSystem
+    type: boolean
+    default: "false"
+    env: BILI_ANTHROPIC_SUMMARY_AS_SYSTEM
+    group: compress
+    id: cw.asas
+    render: compress-row
+    desc_en: "EXPERIMENTAL, default off, Anthropic wire only: emit a fold summary that sits between a user message and an assistant message as its own mid-conversation role:\"system\" message instead of a text block merged into the preceding user message. A fold that starts right after the first user message then leaves that message byte-identical, so upstreams that key their prompt cache on the leading user run (gateways that relocate the caller's system prompt behind it) stop re-writing the system prompt on every fold. Summaries in any other position (followed by a user message, preceded by an assistant message, at either end of the array) keep the default layout. Requires an upstream that accepts mid-conversation system messages; off = byte-identical to the default layout."
+    desc_zh: "实验性，默认关闭，仅 Anthropic 线路：把位于 user 消息与 assistant 消息之间的折叠摘要作为独立的对话中 role:\"system\" 消息发出，而不是并入前一条 user 消息的文本块。这样从首条 user 消息之后开始的折叠不再改写该消息（字节级不变），以首段 user 消息为缓存键的上游（把调用方 system prompt 挪到其后的网关）就不会在每次折叠时重写 system prompt。其他位置的摘要（后接 user 消息、前接 assistant 消息、位于数组两端）保持默认布局。要求上游接受对话中的 system 消息；关闭时布局字节级不变。"
+    site_en: "EXPERIMENTAL boolean (default false), Anthropic wire only: send a fold summary that sits between a user and an assistant message as its own mid-conversation system message, so a fold starting right after the first user message keeps that message byte-identical and the cached head survives. Needs an upstream that accepts mid-conversation system messages; off = byte-identical to the default layout."
+    site_zh: "实验性布尔开关（默认 false），仅 Anthropic 线路：把位于 user 与 assistant 消息之间的折叠摘要作为独立的对话中 system 消息发出，使从首条 user 消息之后开始的折叠不改写该消息、缓存头部得以保留。要求上游接受对话中的 system 消息；关闭 = 与原布局字节级一致。"
   - key: compress.promptPack
     type: "string (builtin: \"default\", \"lean\")"
     default: "builtin \"default\""

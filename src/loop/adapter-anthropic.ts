@@ -1,7 +1,7 @@
-import type { CoreMessage } from "acp-kernel";
+import { isRenderedSummaryMessage, type CoreMessage } from "acp-kernel";
 import { coreToAnthropic, healAnthropicSystemPositions, type AnthropicRequestBody } from "acp-kernel/wire";
 import { dedupeAdjacentOutputConfig } from "../dedupe-adjacent-output-config.js";
-import { appendSystemText, declaredInclusiveFromUsage } from "../util.js";
+import { appendSystemText, declaredInclusiveFromUsage, summariesToAnthropicSystem } from "../util.js";
 import { stampAnthropicSystemCacheControl } from "./cache-control.js";
 import { buildVisibilityMarker } from "./core.js";
 import { composeStreamFilters, createBiliArtifactFilter, createMarkerLineFilter, createTagEchoFilter } from "./tag-echo-filter.js";
@@ -169,7 +169,7 @@ function buildTextDeltaEvent(index: number, text: string): Buffer {
     );
 }
 
-export function createAnthropicAdapter(requestBody: Record<string, unknown>, originalSystem?: AnthropicRequestBody["system"], notes?: string[], errorShape: "protocol" | "completion" = "protocol", cacheMarks?: Map<string, { type: "ephemeral" }>, clientCacheControls?: Map<string, unknown>, absorbArmed?: boolean): CompressLoopAdapter {
+export function createAnthropicAdapter(requestBody: Record<string, unknown>, originalSystem?: AnthropicRequestBody["system"], notes?: string[], errorShape: "protocol" | "completion" = "protocol", cacheMarks?: Map<string, { type: "ephemeral" }>, clientCacheControls?: Map<string, unknown>, absorbArmed?: boolean, summaryAsSystem?: boolean): CompressLoopAdapter {
     const model = (requestBody.model as string) ?? undefined;
     let messageId: string | undefined;
     // #2701: anthropic Threads. Every internal round's message_start carries a
@@ -311,7 +311,12 @@ export function createAnthropicAdapter(requestBody: Record<string, unknown>, ori
             // [#5688] round-2 re-renders from the core view fold reconstruction
             // can leave adjacent effort directives in — collapse like the
             // steady egress or the rebuild 400s where the main request passed.
-            const messages = dedupeAdjacentOutputConfig(coreToAnthropic(coreMessages, cacheMarks ?? clientCacheControls));
+            // Opt-in summary voice, mirrored from the steady path
+            // (prepareAnthropic) so the rebuild keeps the same bytes.
+            const voiced = summaryAsSystem === true
+                ? summariesToAnthropicSystem(coreMessages, (m) => isRenderedSummaryMessage(m))
+                : coreMessages;
+            const messages = dedupeAdjacentOutputConfig(coreToAnthropic(voiced, cacheMarks ?? clientCacheControls));
             // #1876: same append-not-merge rebuild as the steady path's
             // injectSystem — both must emit byte-identical system (F2 seam).
             const system = originalSystem !== undefined ? appendSystemText(systemPrompt, originalSystem) : systemPrompt;

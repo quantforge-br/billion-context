@@ -660,6 +660,50 @@ export function systemToUser<T extends { role: string }>(messages: T[], should?:
 }
 
 
+/** Anthropic-wire summary voice (opt-in, `compress.anthropicSummaryAsSystem`).
+ * coreToAnthropic voices a rendered acp_summary as USER text and merges it
+ * into the neighbouring user message. When a fold starts right after the
+ * conversation's first user message, that changes the head of the message
+ * array on every fold: the first user message gains or swaps a summary block.
+ * Upstreams that key their prompt cache on that leading user run (gateways
+ * that relocate the caller's system prompt behind it) then rewrite the whole
+ * system prompt on every fold, although its text never changed.
+ *
+ * This re-voices such a summary as its own mid-conversation `role:"system"`
+ * message, by stamping the same `rawAnthropicMessage` sidecar a client-sent
+ * system message carries (coreToAnthropic then emits it standalone). Only a
+ * run of consecutive summaries that directly FOLLOWS a user-voiced message
+ * and directly PRECEDES an assistant message is converted — the one position
+ * Anthropic accepts a mid-conversation system in (two-sided rule, #4457 /
+ * #5438). Every other summary keeps today's user voice, so the result is
+ * legal by construction; healAnthropicSystemPositions stays the backstop.
+ * Egress copies only — the input array and its messages are never mutated.
+ * No-op (same array) when no summary qualifies. */
+export function summariesToAnthropicSystem<T extends { role: string; text?: string; rawAnthropicMessage?: unknown }>(messages: T[], isSummary: (m: T) => boolean): T[] {
+    const voicable = (m: T | undefined): m is T =>
+        m !== undefined && m.rawAnthropicMessage === undefined && typeof m.text === "string" && m.text.length > 0 && isSummary(m);
+    let out: T[] | undefined;
+    for (let start = 0; start < messages.length; start++) {
+        if (!voicable(messages[start])) continue;
+        let end = start + 1;
+        while (voicable(messages[end])) end++;
+        const prev = messages[start - 1];
+        const next = messages[end];
+        const followsUser = prev !== undefined && prev.rawAnthropicMessage === undefined && prev.role !== "assistant";
+        const precedesAssistant = next !== undefined && next.rawAnthropicMessage === undefined && next.role === "assistant";
+        if (followsUser && precedesAssistant) {
+            out ??= messages.slice();
+            for (let i = start; i < end; i++) {
+                const m = messages[i] as T;
+                out[i] = { ...m, rawAnthropicMessage: { role: "system", content: [{ type: "text", text: m.text }] } };
+            }
+        }
+        start = end - 1;
+    }
+    return out ?? messages;
+}
+
+
 /** #719: Some OpenAI-compatible backends (DeepSeek) reject assistant messages
  * whose `content` is null — they require a string content (possibly "") or
  * tool_calls ("Invalid assistant message: content or tool_calls must be set").

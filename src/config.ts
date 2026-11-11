@@ -676,6 +676,16 @@ export type CompressSettings = {
      *  BILI_COMPRESS_AT_FOLD_POINT_CLEAR_THINKING wins over every level.
      *  Maps to kernel Config.compressAtFoldPointClearThinking. */
     compressAtFoldPointClearThinking?: boolean;
+    /** Anthropic wire only, opt-in (default OFF): emit a rendered acp_summary
+     *  that sits between a user-voiced message and an assistant message as
+     *  its own mid-conversation `role:"system"` message instead of a text
+     *  block merged into the preceding user message. Keeps the conversation
+     *  head byte-stable across folds for upstreams that key their prompt
+     *  cache on the leading user run. Purely an egress voicing — session
+     *  state is untouched; off = byte-identical to the pre-feature layout.
+     *  Env BILI_ANTHROPIC_SUMMARY_AS_SYSTEM wins over every level. Host-only
+     *  (never reaches the kernel Config). */
+    anthropicSummaryAsSystem?: boolean;
 };
 /** #5079: governs every prompt_cache_key BILI ITSELF writes to an egress body
  *  (chat-wire conversation-id stamping, Responses-wire identity injection).
@@ -2543,6 +2553,8 @@ const COMPRESS_SETTING_FIELDS = new Set([
     "maxSummaryLength", "minSummaryLength",
     // Experimental fold-point carrier relocation switches (view-only).
     "compressAtFoldPoint", "compressAtFoldPointClearThinking",
+    // Anthropic-wire summary voice (egress-only).
+    "anthropicSummaryAsSystem",
 ]);
 
 // Deduped per unique key set per process (same pattern as
@@ -3293,7 +3305,7 @@ export function parseCompressSettings(v: unknown): (CompressSettings & { injectT
     // Experimental fold-point relocation pair (see CompressSettings docs): plain
     // booleans; absent = off. Without this, file-tier/panel values are silently
     // dropped by the parser while env resolution still honors them.
-    for (const key of ["compressAtFoldPoint", "compressAtFoldPointClearThinking"] as const) {
+    for (const key of ["compressAtFoldPoint", "compressAtFoldPointClearThinking", "anthropicSummaryAsSystem"] as const) {
         if (!(key in obj)) continue;
         if (typeof obj[key] !== "boolean") {
             ok = false;

@@ -1095,3 +1095,20 @@ export function resolveCompressAtFoldPointClearThinking(env: NodeJS.ProcessEnv =
     if (raw === "0" || raw === "false" || raw === "off") return false;
     return typeof fileValue === "boolean" ? fileValue : false;
 }
+
+/** Anthropic-wire summary voice switch: when on, a rendered acp_summary that
+ *  sits between a user-voiced message and an assistant message is emitted as
+ *  its own mid-conversation `role:"system"` message instead of a text block
+ *  merged into the preceding user message (see summariesToAnthropicSystem in
+ *  src/util.ts for the position rule and the reason). OPT-IN (default OFF):
+ *  off = byte-identical to the pre-feature layout, and not every
+ *  Anthropic-compatible upstream accepts mid-conversation system messages.
+ *  Env BILI_ANTHROPIC_SUMMARY_AS_SYSTEM (0/false/off vs 1/true/on) wins over
+ *  the config-file `compress.anthropicSummaryAsSystem` boolean; absent
+ *  everywhere = OFF. Garbage spellings fall through tiers. Pure: never throws. */
+export function resolveAnthropicSummaryAsSystem(env: NodeJS.ProcessEnv = process.env, fileValue?: unknown): boolean {
+    const raw = env.BILI_ANTHROPIC_SUMMARY_AS_SYSTEM?.trim().toLowerCase();
+    if (raw === "1" || raw === "true" || raw === "on") return true;
+    if (raw === "0" || raw === "false" || raw === "off") return false;
+    return typeof fileValue === "boolean" ? fileValue : false;
+}
