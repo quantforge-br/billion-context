@@ -82,6 +82,8 @@ bili 永不拥有用户数据:每个被启动的客户端都跑在**真实 home*
 
 **为什么是 `user`,而不是 `system` 或伪造的工具调用。** 流中间的 `system` 消息正是 SGLang 拒绝的东西(#377)。伪造一个 `compress` 工具调用是「更纯粹」的载体,但在代理模式下需要按 id 捏造 assistant `tool_calls` + user `tool_result` 对、在请求里声明该工具、还要处理没有真实调用的预检块 —— 远比改声一条独立笔记侵入得多。`user` 消息允许出现在对话任何位置,是同时满足 SGLang 单 system 规则与前缀缓存稳定的最小改动。接受的取舍:摘要是被折叠历史的替身,把它改声成 user 回合是一种模型能容忍的语义错位(它被明确标记为 `[Compressed conversation section]`)。
 
+**Anthropic 线路 opt-in:摘要作为对话中的 `system` 消息。** Anthropic 线路上锚点不经 `systemToUser` 改声;`coreToAnthropic` 把它作为文本块并入相邻的 user 消息。因此从对话首条 user 消息之后开始的折叠会改写该消息。对单独缓存顶层 `system` 的上游这无害,但有些网关会把调用方的 system prompt 挪到首段 user 消息*之后* —— 在那里每次这样的折叠都会重写整个 system prompt(实测:某网关每次折叠约 22K token)。`compress.anthropicSummaryAsSystem`(`BILI_ANTHROPIC_SUMMARY_AS_SYSTEM`,默认关)让 `summariesToAnthropicSystem`(`src/util.ts`)在摘要紧跟 user 声部消息且紧邻 assistant 消息之前时,把它的出站副本标为独立的 `role: "system"` 消息 —— 这是 Anthropic 双侧位置规则唯一允许的位置。头部于是在折叠前后保持字节级一致。其他位置的摘要(后接 user 消息、前接 assistant 消息、位于两端)保持合并布局,所以结束在回合边界上的折叠**不会**受益。round-2 压缩循环重建与 `count_tokens` 应用同一变换,三条路径输出字节一致。保持 opt-in 是因为并非所有 Anthropic 兼容上游都接受对话中的 system 消息。
+
 **两种模式能共存吗?**
 
 - **同一代理实例:可以,且是设计使然。** 一个代理同时服务插件客户端与普通客户端;`pluginMode` 按请求判定(`x-bili-plugin` header)、按会话绑定(`session.metadata.pluginAgent`)。启动器复用已在跑的代理。

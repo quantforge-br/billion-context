@@ -220,6 +220,26 @@ a summary is a stand-in for the folded history, and re-voicing it as a user
 turn is a semantic mismatch the model tolerates (it is clearly marked
 `[Compressed conversation section]`).
 
+**Anthropic wire opt-in: the summary as a mid-conversation `system` message.**
+On the Anthropic wire the anchor is not re-voiced by `systemToUser`;
+`coreToAnthropic` merges it as a text block into the neighbouring user
+message. A fold that starts right after the conversation's first user message
+therefore rewrites that message. That is harmless for an upstream that caches
+the top-level `system` separately, but some gateways relocate the caller's
+system prompt *behind* the leading user run — there every such fold re-writes
+the whole system prompt (measured: ~22K tokens per fold on one such gateway).
+`compress.anthropicSummaryAsSystem` (`BILI_ANTHROPIC_SUMMARY_AS_SYSTEM`,
+default off) makes `summariesToAnthropicSystem` (`src/util.ts`) stamp the
+egress copy of a summary as its own `role: "system"` message when it directly
+follows a user-voiced message and directly precedes an assistant message — the
+only slot the Anthropic two-sided position rule allows. The head then stays
+byte-identical across the fold. Summaries in any other slot (followed by a
+user message, preceded by an assistant message, at either end) keep the
+merged layout, so a fold that ends on a turn boundary is **not** helped. The
+round-2 compress-loop rebuild and `count_tokens` apply the same transform, so
+all three paths emit identical bytes. It stays opt-in because not every
+Anthropic-compatible upstream accepts mid-conversation system messages.
+
 **Do the two modes coexist?**
 
 - **Same proxy instance: yes, by design.** One proxy serves plugin and plain
